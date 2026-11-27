@@ -1,0 +1,60 @@
+SetuHaul integrity proof: no double booking (test T-01)
+=======================================================
+Generated : 2026-11-27T17:30:14
+Python    : 3.13.5   SQLite: 3.49.1   OS: Windows 11
+Database  : fresh copy of data/setuhaul_original.db per repeat (the original is never written)
+Method    : 10 threads, each with its own connection and its own truck, wait at a barrier and
+            all try to hold + confirm the same slot at the same instant. Repeated per run.
+Note      : approval routing (check 10) is switched off in this test so all 10 trucks may legally
+            take the slot; approval has its own tests in tests/concurrency/test_commit_layer.py.
+
+RUN 1  Real code: BEGIN IMMEDIATE + re-check inside the transaction + hold index
+--------------------------------------------------------------------------------
+mode                         : protected
+slot                         : SLOT-JAI-048
+threads per repeat           : 10 (one truck each: SHP1003, SHP1004, SHP1005, SHP1006, SHP1007, SHP1009, SHP1012, SHP1013, SHP1014, SHP1018)
+repeats                      : 100
+requests sent                : 1000
+bookings made (CONFIRMED)    : 100
+refused by code              : 900
+blocked by database index    : 0
+errors                       : 0
+repeats with a double booking: 0
+double bookings (extra rows) : 0
+live bookings on slot, per repeat (min/max): 1/1
+elapsed seconds              : 35.7
+
+RUN 2  CONTROL: naive check-then-insert, no lock; client's unique index still on
+--------------------------------------------------------------------------------
+mode                         : naive_index_on
+slot                         : SLOT-JAI-048
+threads per repeat           : 10 (one truck each: SHP1003, SHP1004, SHP1005, SHP1006, SHP1007, SHP1009, SHP1012, SHP1013, SHP1014, SHP1018)
+repeats                      : 100
+requests sent                : 1000
+bookings made (CONFIRMED)    : 100
+refused by code              : 0
+blocked by database index    : 900
+errors                       : 0
+repeats with a double booking: 0
+double bookings (extra rows) : 0
+live bookings on slot, per repeat (min/max): 1/1
+elapsed seconds              : 30.6
+
+RUN 3  CONTROL: naive check-then-insert AND unique index dropped (throwaway copy)
+---------------------------------------------------------------------------------
+mode                         : naive_index_off
+slot                         : SLOT-JAI-048
+threads per repeat           : 10 (one truck each: SHP1003, SHP1004, SHP1005, SHP1006, SHP1007, SHP1009, SHP1012, SHP1013, SHP1014, SHP1018)
+repeats                      : 100
+requests sent                : 1000
+bookings made (CONFIRMED)    : 1000
+refused by code              : 0
+blocked by database index    : 0
+errors                       : 0
+repeats with a double booking: 100
+double bookings (extra rows) : 900
+live bookings on slot, per repeat (min/max): 10/10
+elapsed seconds              : 30.5
+
+RESULT: PASS. Run 1 made exactly 1 booking in every repeat, 0 double bookings.
+Run 3 shows the test CAN fail: without the lock and the index, the same race double books.

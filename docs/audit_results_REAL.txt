@@ -1,0 +1,218 @@
+Audit of setuhaul_original.db using 01_audit_queries.sql
+
+=== Q-00: which rules does the database really enforce? ===
+type | name | tbl_name
+(11 rows)
+index | ix_chat_messages_thread_time | chat_messages
+index | ix_eta_updates_shipment_created | eta_updates
+index | ix_exceptions_status_time | driver_exceptions
+index | ix_shipments_destination_status | shipments
+index | ix_slots_facility_time | appointment_slots
+index | ux_active_appointment_per_slot | appointments
+index | ux_current_active_appointment_per_shipment | appointments
+view | v_current_facility_queue | v_current_facility_queue
+view | v_inbound_operational_state | v_inbound_operational_state
+view | v_latest_eta | v_latest_eta
+view | v_slot_availability | v_slot_availability
+
+=== Q-00b: are foreign keys switched on for this connection? ===
+foreign_keys
+(1 rows)
+0
+
+=== Q-00c: do the stored rows already break a foreign key? ===
+table | rowid | parent | fkid
+(0 rows)
+
+=== Q-01: row counts match the brief ===
+t | n
+(18 rows)
+carriers | 4
+drivers | 15
+vehicle_types | 5
+vehicles | 15
+facilities | 2
+docks | 9
+facility_contacts | 5
+facility_rules | 6
+shipments | 21
+eta_updates | 12
+appointment_slots | 106
+appointments | 20
+dock_status_events | 3
+facility_checkins | 5
+chat_threads | 12
+chat_messages | 20
+driver_exceptions | 10
+operational_messages | 5
+
+=== Q-02: every timestamp uses the same +05:30 offset ===
+col | tail | n
+(6 rows)
+shipments.latest_eta_ts | +05:30 | 21
+eta_updates.declared_eta_ts | +05:30 | 12
+appointment_slots.slot_start_ts | +05:30 | 106
+dock_status_events.event_start_ts | +05:30 | 3
+facility_checkins.gate_in_ts | +05:30 | 5
+chat_messages.message_ts | +05:30 | 20
+
+=== Q-03: control: the one-active-booking-per-slot rule holds ===
+slot_id | active_n
+(0 rows)
+
+=== Q-04: active booking on a dock that is broken, in maintenance or slowed ===
+appointment_id | shipment_id | dock_code | appointment_status | slot_start_ts | slot_end_ts | event_type | event_start_ts | event_end_ts
+(3 rows)
+APT1002 | SHP1002 | D2 | IN_PROGRESS | 2026-08-04T08:00:00+05:30 | 2026-08-04T09:00:00+05:30 | CAPACITY_REDUCTION | 2026-08-04T08:00:00+05:30 | 2026-08-04T09:20:00+05:30
+APT1004 | SHP1004 | D2 | CONFIRMED | 2026-08-04T09:00:00+05:30 | 2026-08-04T10:00:00+05:30 | CAPACITY_REDUCTION | 2026-08-04T08:00:00+05:30 | 2026-08-04T09:20:00+05:30
+APT1005 | SHP1005 | D3 | CONFIRMED | 2026-08-04T09:00:00+05:30 | 2026-08-04T10:00:00+05:30 | BREAKDOWN | 2026-08-04T09:15:00+05:30 | 2026-08-04T13:00:00+05:30
+
+=== Q-05: the availability view ignores dock events ===
+slot_id | dock_code | slot_start_ts | availability_status | event_type | reason
+(3 rows)
+SLOT-JAI-015 | D2 | 2026-08-04T08:00:00+05:30 | OCCUPIED | CAPACITY_REDUCTION | Unload overrun from prior shift reduced turnover speed
+SLOT-JAI-016 | D2 | 2026-08-04T09:00:00+05:30 | OCCUPIED | CAPACITY_REDUCTION | Unload overrun from prior shift reduced turnover speed
+SLOT-JAI-030 | D3 | 2026-08-04T09:00:00+05:30 | OCCUPIED | BREAKDOWN | Hydraulic dock leveller failure
+
+=== Q-06: load heavier than the dock allows ===
+appointment_id | shipment_id | appointment_status | load_weight_kg | dock_code | dock_type | max_vehicle_weight_kg
+(2 rows)
+APT1014A | SHP1014 | PENDING_CONFIRMATION | 21000 | D1 | STANDARD | 20000
+APT1005 | SHP1005 | CONFIRMED | 20500 | D3 | STANDARD | 20000
+
+=== Q-07: control: dock type matches the load ===
+appointment_id | shipment_id | required_dock_type | dock_code | dock_type
+(0 rows)
+
+=== Q-08: active booking that ends before the truck can arrive ===
+appointment_id | shipment_id | appointment_status | effective_eta_ts | slot_start_ts | slot_end_ts
+(2 rows)
+APT1006 | SHP1006 | CONFIRMED | 2026-08-04T11:20:00+05:30 | 2026-08-04T10:00:00+05:30 | 2026-08-04T11:00:00+05:30
+APT1015A | SHP1015 | CONFIRMED | 2026-08-04T18:30:00+05:30 | 2026-08-04T17:00:00+05:30 | 2026-08-04T18:00:00+05:30
+
+=== Q-09: unload takes longer than the booked slot ===
+appointment_id | shipment_id | expected_unload_min | slot_min
+(4 rows)
+APT1014A | SHP1014 | 75 | 60
+APT1002 | SHP1002 | 70 | 60
+APT1005 | SHP1005 | 75 | 60
+APT1009 | SHP1009 | 75 | 60
+
+=== Q-10: the "latest ETA" view picks the newest update, not the most reliable ===
+shipment_id | effective_eta_ts | eta_source | eta_confidence | eta_note
+(2 rows)
+SHP1013 | 2026-08-04T11:00:00+05:30 | DRIVER_DECLARED | LOW | Driver said only: late by one hour.
+SHP1017 | 2026-08-04T12:45:00+05:30 | DRIVER_DECLARED | LOW | Driver expects arrival between 12:30 and 13:00.
+
+=== Q-11: one shipment, several different ETAs ===
+shipment_id | n_updates | etas
+(1 rows)
+SHP1006 | 2 | 10:50 MEDIUM -> 11:20 HIGH
+
+=== Q-12: duplicate driver message created a second exception ===
+chat_message_id | thread_id | external_message_id | is_duplicate | message_ts | message_text
+(1 rows)
+MSG015 | THR009 | wa-9009 | 1 | 2026-08-04T09:35:02+05:30 | Traffic after Shahpura. Reaching around 11:20. Any slot after 12?
+
+=== Q-12: duplicate driver message created a second exception ===
+dedupe_key | n | rows_
+(1 rows)
+DRV006-SHP1006-20260804-0934 | 2 | EXC001:NEEDS_INFORMATION,EXC009:DUPLICATE
+
+=== Q-13: which shipment is the driver talking about? ===
+driver_id | live_shipments | shipments
+(4 rows)
+DRV003 | 2 | SHP1003,SHP1018
+DRV004 | 2 | SHP1004,SHP1020
+DRV006 | 2 | SHP1006,SHP1021
+DRV007 | 2 | SHP1007,SHP1016
+
+=== Q-13: which shipment is the driver talking about? ===
+thread_id | driver_id | thread_status | thread_intent
+(1 rows)
+THR010 | DRV004 | WAITING_FOR_DRIVER | UNKNOWN
+
+=== Q-14: control: thread driver = shipment driver ===
+thread_id | thread_driver | shipment_id | shipment_driver
+(0 rows)
+
+=== Q-15: driver asks about a cancelled shipment ===
+thread_id | driver_id | shipment_id | current_status | thread_intent
+(1 rows)
+THR012 | DRV008 | SHP1019 | CANCELLED | CHECK_STATUS
+
+=== Q-16: warehouse confirmation pending with no expiry ===
+appointment_id | shipment_id | dock_code | slot_start_ts | booked_at | operational_message_id | delivery_status
+(2 rows)
+APT1013A | SHP1013 | D2 | 2026-08-04T11:00:00+05:30 | 2026-08-04T09:32:00+05:30 | OM002 | QUEUED
+APT1014A | SHP1014 | D1 | 2026-08-04T11:00:00+05:30 | 2026-08-04T09:52:00+05:30 | OM001 | SENT
+
+=== Q-17: an escalation message that never arrived ===
+operational_message_id | shipment_id | channel | recipient_address | subject | sent_at | delivery_status
+(2 rows)
+OM002 | SHP1013 | EMAIL | neha.bansal@setuhaul.example | Slot confirmation request for SHP1013 | 2026-08-04T09:32:00+05:30 | QUEUED
+OM004 | SHP1015 | EMAIL | night.shift@setuhaul.example | Reefer slot exception for SHP1015 | 2026-08-04T16:25:00+05:30 | FAILED
+
+=== Q-18: contacts with missing details or vacant roles ===
+contact_id | facility_id | contact_role | contact_name | email | phone
+(1 rows)
+CON005 | FAC-GGN-01 | NIGHT_SHIFT_COORDINATOR | Vacant Position |  | +91-124-5001209
+
+=== Q-19: SHP1015 (reefer): is any compatible slot left after its ETA? ===
+slot_id | dock_code | slot_start_ts | availability_status
+(0 rows)
+
+=== Q-19: SHP1015 (reefer): is any compatible slot left after its ETA? ===
+slot_id | dock_code | slot_start_ts | slot_end_ts | availability_status | block_reason
+(5 rows)
+SLOT-JAI-066 | D5 | 2026-08-04T17:00:00+05:30 | 2026-08-04T18:00:00+05:30 | OCCUPIED | 
+SLOT-JAI-067 | D5 | 2026-08-04T18:00:00+05:30 | 2026-08-04T19:00:00+05:30 | BLOCKED | Refrigeration power maintenance
+SLOT-JAI-068 | D5 | 2026-08-04T19:00:00+05:30 | 2026-08-04T20:00:00+05:30 | BLOCKED | Refrigeration power maintenance
+SLOT-JAI-069 | D5 | 2026-08-04T20:00:00+05:30 | 2026-08-04T21:00:00+05:30 | BLOCKED | Refrigeration power maintenance
+SLOT-JAI-070 | D5 | 2026-08-04T21:00:00+05:30 | 2026-08-04T22:00:00+05:30 | BLOCKED | Refrigeration power maintenance
+
+=== Q-20: rules stored as free text, not enforced ===
+rule_id | facility_id | rule_type | rule_value | description
+(6 rows)
+RULE001 | FAC-JAI-01 | CHECKIN_EARLY_LIMIT_MIN | 60 | Trucks may check in up to 60 minutes before the booked slot.
+RULE002 | FAC-JAI-01 | NO_SHOW_GRACE_MIN | 30 | A truck may be marked no-show 30 minutes after the slot starts if it has not checked in.
+RULE003 | FAC-JAI-01 | REEFER_DOCK_REQUIRED | TRUE | Temperature-controlled loads must use dock D5.
+RULE004 | FAC-JAI-01 | HEAVY_DOCK_REQUIRED_KG | 25000 | Loads above 25,000 kg must use the heavy dock.
+RULE005 | FAC-JAI-01 | LAST_NEW_START_TIME | 21:00 | No new unloading operation should start after 21:00 without manual approval.
+RULE006 | FAC-GGN-01 | NO_SHOW_GRACE_MIN | 20 | A truck may be marked no-show 20 minutes after the slot starts.
+
+=== Q-21: status words: is there a "held while the driver decides" state? ===
+k | v | n
+(18 rows)
+slot_status | BLOCKED | 7
+slot_status | OPEN | 99
+appointment_status | CANCELLED | 4
+appointment_status | COMPLETED | 1
+appointment_status | CONFIRMED | 11
+appointment_status | IN_PROGRESS | 1
+appointment_status | NO_SHOW | 1
+appointment_status | PENDING_CONFIRMATION | 2
+shipment_status | ASSIGNED | 3
+shipment_status | CANCELLED | 2
+shipment_status | COMPLETED | 1
+shipment_status | IN_DOCK | 1
+shipment_status | IN_TRANSIT | 11
+shipment_status | WAITING | 3
+priority_code | CRITICAL | 2
+priority_code | HIGH | 6
+priority_code | LOW | 4
+priority_code | NORMAL | 9
+
+=== Q-22: personal data in the database (privacy) ===
+src | n
+(4 rows)
+drivers.phone | 15
+facility_contacts.phone | 5
+operational_messages SMS recipient | 1
+chat text with 10+ digits | 0
+
+=== Q-23: messages that need a person to read them ===
+chat_message_id | thread_id | message_ts | message_text
+(2 rows)
+MSG005 | THR003 | 2026-08-04T09:19:00+05:30 | I am late by one hour.
+MSG016 | THR010 | 2026-08-04T09:31:00+05:30 | I will be late by 45 minutes.

@@ -1,0 +1,60 @@
+# SetuHaul policy values.
+# Every number here is an ASSUMPTION until the named owner signs it off.
+# Code reads these values; nothing here is hard-coded in Python or in prompts.
+version = "2026-11-27.1"
+owner = "SetuHaul operations head (pending sign-off)"
+
+[eta]
+# Safety margin added to the resolved ETA, by confidence (architecture 9.4 rule 5).
+# Owner: operations head. Calibrate with gate-in history.
+margin_min = { HIGH = 15, MEDIUM = 30, LOW = 60 }
+# Confidence given to a shipment's own plan time when no ETA update exists.
+plan_confidence = "MEDIUM"
+# Confidence of a driver statement we read back and the driver confirmed in chat.
+confirmed_declaration_confidence = "MEDIUM"
+
+[holds]
+# A hold is an exclusive claim on a slot while the driver decides (architecture 9.2).
+expiry_min = 5
+
+[feasibility]
+# Buffer between bookings on the same dock (minutes). The real data has no buffer rule, so 0.
+buffer_min = 0
+# If the unload takes longer than the slot, the truck spills into the next slot on that dock.
+# true = treat that spill as an OVERLAP with the next booking (audit issue I-05).
+overrun_blocks_next_slot = true
+# Statuses that count as a live booking (real data, UPPERCASE).
+active_appointment_statuses = ["PENDING_CONFIRMATION", "CONFIRMED", "IN_PROGRESS"]
+# Shipment statuses that may still be rebooked.
+rebookable_shipment_statuses = ["PLANNED", "ASSIGNED", "IN_TRANSIT", "AT_GATE", "WAITING"]
+# Dock events that make a dock unusable while they last.
+blocking_dock_events = ["MAINTENANCE", "BREAKDOWN", "CAPACITY_REDUCTION", "MANUAL_BLOCK"]
+
+[approval]
+# Check 10: an option is shown but needs a coordinator when it is this far after the plan,
+# on another calendar day, or starts after the facility's LAST_NEW_START_TIME rule (RULE005).
+# Owner: SetuHaul compliance.
+max_shift_min = 180
+other_day_needs_approval = true
+
+[priority]
+# Rank order of priority codes, highest first.
+order = ["CRITICAL", "HIGH", "NORMAL", "LOW"]
+# P-3 protected last slot: when a dock type has this many or fewer compatible free slots
+# in the next window, the LAST one is shown only to loads at or above min_priority.
+protected_slot_threshold = 3
+protected_window_min = 240
+protected_min_priority = "HIGH"
+# P-5 anti-starvation: after this many minutes of waiting a request moves up one class.
+aging_bump_min = 10
+
+[offers]
+max_options = 3
+
+[escalation]
+# Response targets for hand-offs, minutes (architecture 9.9). Owner: operations head.
+deadline_min = { SAFETY = 5, NO_FEASIBLE_SLOT = 15, NEEDS_APPROVAL = 10, MISMATCH = 15, POLICY_CONFLICT = 10, SYSTEM_FAILURE = 15, REPEATED_CLARIFICATION = 15 }
+
+[demo]
+# The snapshot is 4 Aug 2026. The scenario clock pretends "now" is this moment.
+now = "2026-08-04T10:00:00+05:30"

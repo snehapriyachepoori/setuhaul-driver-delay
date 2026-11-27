@@ -1,0 +1,7 @@
+BASE WEIGHTS (max 500, shown also as percent)
+  A rules-first workflow: 25x5 + 15x5 + 20x2 + 10x5 + 10x4 + 5x5 + 5x5 + 5x5 + 5x3 = 420 (84.0%)
+  B single agent + stage-gated tools + code commit: 25x5 + 15x4 + 20x5 + 10x4 + 10x3 + 5x3 + 5x4 + 5x3 + 5x4 = 425 (85.0%)
+  C multi-agent supervisor: 25x4 + 15x3 + 20x5 + 10x2 + 10x1 + 5x2 + 5x3 + 5x2 + 5x5 = 335 (67.0%)
+
+SENSITIVITY (language 20->10, testability 10->20): {'A rules-first workflow': 90.0, 'B single agent + stage-gated tools + code commit': 83.0, 'C multi-agent supervisor': 61.0}
+SENSITIVITY (must run on small local model only): {'A rules-first workflow': 90.0, 'B single agent + stage-gated tools + code commit': 80.0, 'C multi-agent supervisor': 59.1}
