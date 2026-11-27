@@ -5,8 +5,8 @@
 | 1 Problem framing | done | 27 Nov 2026 | Audit rewritten for the real schema (24 queries, 18 issues, 4 controls); results in audit_results_REAL.txt | Yes |
 | 2 Cause and effect | needs update (light) | 27 Nov 2026 | Check mechanisms M1 to M4 against real data; M4 (UTC time) is not in the real data | Yes, with CHG-001 check |
 | 3 Architecture (option B) | done, small updates | 27 Nov 2026 | Status words are UPPERCASE in the real DB; RULE005 is "no new start after 21:00", not "D5 closes 19:00"; SHP1015 ETA is 18:30 | Yes |
-| 4 Build | core done | 27 Nov 2026 | Steps 1-5, 7-9 done; 74 tests pass; real-model scenario passes. Open: LangSmith (E5), scheduler (E6), cost workbook update, GitHub push | Yes, core |
-| 5 Test and harden | partly | 27 Nov 2026 | T-01 to T-15 and T-18 automated; failure cases T-19 to T-24 covered inside tests/concurrency and tests/scenarios (no separate tests/failure folder) | No |
+| 4 Build | core done | 27 Nov 2026 | Steps 1-5, 7-9 done; 93 tests pass; real-model scenario passes; pushed to GitHub. Open: LangSmith (E5), scheduler (E6), cost workbook update | Yes, core |
+| 5 Test and harden | done (core + failure) | 27 Nov 2026 | T-01 to T-15, T-18 and failure tests T-19 to T-24 (`tests/failure/`, 17 tests, `docs/failure_tests.txt`); 93 tests pass. Two gaps found and written down: repeat on a new thread not flagged (T-19); failed commit tells the driver a coordinator will help but creates no hand-off (T-22) | Yes |
 | 6 Observe | partly | 27 Nov 2026 | Audit row per turn; `docs/measures.md` (all nine); no LangSmith yet | No |
 | 7 Client readout | draft | 27 Nov 2026 | `docs/client_readout.md` (one page, real numbers) | Learner to review |
 

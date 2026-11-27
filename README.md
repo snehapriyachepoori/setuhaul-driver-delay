@@ -23,7 +23,8 @@ python run.py demo            tests + integrity proof + scenario run
 ```
 | Command | What it does | Needs a model key? |
 |---|---|---|
-| `python run.py test` | All model-free tests: unit, tools, concurrency (100-repeat race), conversations with the rules model | No |
+| `python run.py test` | All model-free tests: unit, tools, concurrency (100-repeat race), conversations with the rules model, failure tests | No |
+| `python run.py failure` | Failure tests T-19 to T-24 only, saved to `docs/failure_tests.txt` | No |
 | `python run.py integrity` | Writes `docs/integrity_proof.txt` (about 2 minutes) | No |
 | `python run.py scenario` | SHP1013 rebooking + SHP1015 escalation, writes `docs/scenario_run.md` | Yes (or add `--model rules`) |
 | `python run.py chat` | Talk to it as a driver; sign in with a snapshot phone such as `+91-9000010013` | Yes (or `--model rules`) |
@@ -68,7 +69,7 @@ Python 3.13.5, SQLite 3.49.1, langgraph 1.2.24, langgraph-checkpoint-sqlite 3.1.
 | `src/agent/` | Model adapter, prompt (`prompts/system_v1.md`), rules model, LangGraph graph |
 | `src/guardrails/input.py` | Phone masking, safety cues, injection screen, explicit-yes check |
 | `src/auth.py` | Demo-level login (phone number, coordinator PIN) |
-| `tests/` | `unit`, `tools`, `concurrency`, `scenarios` (74 tests) |
+| `tests/` | `unit`, `tools`, `concurrency`, `scenarios`, `failure` (93 tests) |
 
 ## Tests mapped to the test plan
 | Test | Where |
@@ -89,6 +90,14 @@ Python 3.13.5, SQLite 3.49.1, langgraph 1.2.24, langgraph-checkpoint-sqlite 3.1.
 | T-14 connection | `tests/unit/test_db_and_migration.py` |
 | T-15 memory | `test_resume_after_restart_and_no_phone_in_checkpoint` |
 | T-18 auth | `tests/tools/test_tools.py` (unknown phone, other driver, PIN) |
+| T-19 duplicate message (THR009) | `tests/failure/test_t19_duplicate_message.py` |
+| T-20 option blocked after it was shown | `tests/failure/test_t20_stale_option.py` |
+| T-21 crash in the middle of a rebooking | `tests/failure/test_t21_crash_mid_commit.py` |
+| T-22 commit forced to fail | `tests/failure/test_t22_forced_commit_failure.py` |
+| T-23 expired hold | `tests/failure/test_t23_expired_hold.py` (+ control inside 5 minutes) |
+| T-24 wrong driver, unknown phone | `tests/failure/test_t24_wrong_driver.py` |
+
+Failure tests T-19 to T-24 break things on purpose (crash, failed commit, blocked slot, late reply, wrong person) through the full conversation, not just the commit function. Output: `docs/failure_tests.txt`.
 
 ## Authentication (demo-level, NOT production security)
 A driver starts a session with a phone number checked against `drivers.phone`; every tool checks the shipment belongs to that driver (MISMATCH otherwise, nothing revealed). The coordinator view needs `COORDINATOR_PIN` from `.env`. A typed phone number is not proof of identity: a real channel (for example WhatsApp) supplies a verified number. No rate limiting, no lockout, no session expiry.
@@ -103,4 +112,6 @@ A driver starts a session with a phone number checked against `drivers.phone`; e
 - Approval triggers "after 21:00" (RULE005) and "another day" are coded but cannot occur on this snapshot (no such slots), so only the "more than 3 hours later" trigger is exercised by tests.
 - Unload longer than the slot is treated as blocking the next slot on that dock (an assumption; real unload times are unknown).
 - All policy numbers in `config/policy.toml` are **assumptions** awaiting the named owner's decision.
+- **A repeated message on a NEW thread is not flagged as a repeat** (the real THR009 case: new thread, new channel id). It only shows options again; nothing is booked unless the driver picks and says yes again (T-19).
+- **After a failed commit the driver is told "a coordinator can help", but no hand-off row is created** and the conversation stays at CONFIRM. Nothing is booked and "confirmed" is never said (T-22), but no coordinator is actually alerted.
 - The snapshot database is committed so the demo runs; it contains the challenge's sample driver phones.

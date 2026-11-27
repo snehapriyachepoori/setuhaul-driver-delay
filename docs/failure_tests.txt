@@ -1,0 +1,48 @@
+SetuHaul failure tests T-19 to T-24
+===================================
+What this is: tests that break things on purpose and check the system fails SAFELY.
+Each test runs the full conversation (graph, tools, real database copy) with the free rules model,
+so no API key is needed. Database: the client snapshot (data/), copied fresh for every test.
+
+| ID   | What we break                                        | Pass rule                                              |
+|------|------------------------------------------------------|--------------------------------------------------------|
+| T-19 | Same message delivered twice (THR009 repeats THR001) | One action; the repeat gets the stored first reply      |
+| T-20 | Coordinator blocks a slot after it was shown          | Refused with a reason, fresh options, nothing booked    |
+| T-21 | Power cut after the old booking is cancelled          | Everything rolled back; old booking still live          |
+| T-22 | The database refuses the COMMIT                       | Driver is never told "confirmed"                        |
+| T-23 | Driver says yes six minutes after the hold            | Refused (hold expires after 5 min); control at 4 min OK |
+| T-24 | Unknown phone, suspended driver, other driver's load  | No session or MISMATCH; no other driver's data shown    |
+
+Known gaps these tests found (also in README "What does not work yet"):
+- T-19: the real THR009 repeat came on a NEW thread with a NEW channel id, so the message key cannot
+  catch it. Safe today because a repeat only shows options; nothing is booked unless the driver picks
+  and says yes again. It is not flagged as a repeat.
+- T-22: after a failed commit the reply says "A coordinator can help if needed", but no hand-off row is
+  created and the conversation stays at stage CONFIRM. Nothing is booked, but nobody is alerted.
+
+Run: 27 Nov 2026 21:59
+Command: python -m pytest tests/failure -v
+-----------------------------------------------------------------------------------------------
+============================= test session starts =============================
+plugins: anyio-4.16.0, langsmith-0.16.2
+collecting ... collected 17 items
+
+tests/failure/test_t19_duplicate_message.py::test_same_delay_report_twice_acts_once PASSED [  5%]
+tests/failure/test_t19_duplicate_message.py::test_same_yes_twice_books_once PASSED [ 11%]
+tests/failure/test_t19_duplicate_message.py::test_repeat_on_a_new_thread_books_nothing_by_itself PASSED [ 17%]
+tests/failure/test_t20_stale_option.py::test_blocked_after_shown_is_refused_and_new_options_given PASSED [ 23%]
+tests/failure/test_t21_crash_mid_commit.py::test_crash_after_cancel_rolls_everything_back PASSED [ 29%]
+tests/failure/test_t22_forced_commit_failure.py::test_commit_fails_driver_not_told_confirmed PASSED [ 35%]
+tests/failure/test_t22_forced_commit_failure.py::test_a_model_that_lies_after_a_failed_commit_is_overruled PASSED [ 41%]
+tests/failure/test_t23_expired_hold.py::test_yes_after_expiry_is_refused PASSED [ 47%]
+tests/failure/test_t23_expired_hold.py::test_yes_just_before_expiry_still_works PASSED [ 52%]
+tests/failure/test_t24_wrong_driver.py::test_unknown_or_bad_phone_gets_no_session[+91-9999999999] PASSED [ 58%]
+tests/failure/test_t24_wrong_driver.py::test_unknown_or_bad_phone_gets_no_session[] PASSED [ 64%]
+tests/failure/test_t24_wrong_driver.py::test_unknown_or_bad_phone_gets_no_session[not a phone] PASSED [ 70%]
+tests/failure/test_t24_wrong_driver.py::test_unknown_or_bad_phone_gets_no_session[12345] PASSED [ 76%]
+tests/failure/test_t24_wrong_driver.py::test_known_phone_gets_a_session_with_masked_number PASSED [ 82%]
+tests/failure/test_t24_wrong_driver.py::test_inactive_driver_gets_no_session PASSED [ 88%]
+tests/failure/test_t24_wrong_driver.py::test_other_drivers_shipment_is_refused_and_nothing_leaks PASSED [ 94%]
+tests/failure/test_t24_wrong_driver.py::test_cannot_switch_to_another_drivers_load_mid_conversation PASSED [100%]
+
+============================= 17 passed in 12.52s =============================
