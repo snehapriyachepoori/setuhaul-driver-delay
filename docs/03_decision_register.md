@@ -75,22 +75,23 @@ Not yet applied in this table: unload overrun beyond the slot (Q-09), driver's l
 
 - **Options rejected:** hold on show (35 browsing drivers would lock the day); no holds (the second driver loses after saying yes).
 - **Hold time:** 5 minutes (**Assumption**, owner warehouse planner).
-- **Evidence:** the seed's own agent already separates them: "warehouse confirmation is still pending. I will not treat it as confirmed" (THR004, Data). Tested by the stale-option and expiry tests (**Test**, T-03).
+- **Evidence:** the seed's own agent already separates them: "warehouse confirmation is still pending. I will not treat it as confirmed" (THR004, Data). Tested by the stale-option and expiry tests (**Test**, T-03: passed; `test_stale_option_refused_at_confirm`, `test_expired_hold_is_not_trusted`).
 - **Revisit if:** holds expire often or utilisation drops.
 
 ### D-07 Ordering simultaneous requests (brief 7)
 - **Chosen:** policy P-1 to P-5 (section 9.6): a confirmed promise is never taken back automatically; first hold wins; the last compatible slot of a scarce type is kept for CRITICAL loads; pre-emption or a policy conflict goes to a person; in a queue, order by priority, then earliest latest-finish, then arrival, with ageing.
 - **What a losing carrier is told:** "Another truck confirmed this slot first. Here is what is still open." If P-3 hid a slot: "That slot is kept for time-critical loads."
-- **Evidence:** the seed's competing set: SHP1006 (HIGH, ETA 11:20), SHP1012 (NORMAL, 11:10), SHP1013 (NORMAL, 11:00 LOW), SHP1014 (CRITICAL, 11:25), and SHP1009 (CRITICAL, 10:50) (Data, database guide). The replay result is filled by build step 11 (**Test**, T-11). **Owner of the policy:** operations head.
+- **Evidence:** the seed's competing set: SHP1006 (HIGH, ETA 11:20), SHP1012 (NORMAL, 11:10), SHP1013 (NORMAL, 11:00 LOW), SHP1014 (CRITICAL, 11:25), and SHP1009 (CRITICAL, 10:50) (Data, database guide). Replay result (**Test**, T-11, `docs/competing_trucks.md`): 0 policy violations in both replays. Finding: at XS tier simultaneous requests are first-hold-wins, so a NORMAL load can beat a CRITICAL one; P-5 ordering applies only with the pilot queue (CHG-009). **Owner of the policy:** operations head.
 - **Revisit if:** the owner supplies a different policy.
 
 ### D-08 Facility recalculation (optional, brief 8)
 - **Chosen:** a dispatch rule as a read-only tool. Recalculate on a new ETA, a dock event or a cancellation. Fixed: trucks in a dock (SHP1002 IN_PROGRESS) and confirmed promises unless a person agrees. Objective in plain words: less waiting, fewer missed appointments, fewer changes to promises already given. CP-SAT only with a reason.
-- **Evidence:** one replay with SHP1002 (in dock, overran), SHP1003 (early, waiting), SHP1004 (late, waiting), SHP1005 (waiting, dock broke) against first-come-first-served (**Test**, optional).
+- **Evidence:** one replay with SHP1002 (in dock, overran), SHP1003 (early, waiting), SHP1004 (late, waiting), SHP1005 (waiting, dock broke) against first-come-first-served (**Test**, optional: **not attempted yet**).
 
 ### D-09 Stale options, cancellations, duplicates, retries (brief 9)
 - **Chosen:** re-check at hold and at confirm; offers recorded; an idempotency key on every write; inbound message key (thread + external id + text hash); cancel-old and create-new in one transaction; the reply is built only after the commit.
 - **Evidence, one replayed case each (Test, T-03 to T-05):**
+  - Results: all passed (`test_duplicate_message_acts_once`, `test_stale_option_refused_at_confirm`, `test_failure_mid_commit_leaves_no_half_state`, `test_cancelled_shipment_gets_nothing`).
   - Duplicate: THR009 repeats THR001's message (MSG015, `is_duplicate` = 1), and today it created a second exception with the same dedupe key (EXC001, EXC009; Data Q-12). Replay: one action.
   - Stale option: offer a slot, block it, then accept: refused with new options.
   - Cancellation: APT1008 was cancelled and freed SLOT-JAI-017 (Data). Replay rebooking with a forced failure between writes: nothing half-done.
@@ -111,7 +112,7 @@ Not yet applied in this table: unload overrun beyond the slot (Q-09), driver's l
 
 ### D-13 Proving no double booking (brief 13)
 - **Chosen:** ten threads, each with its own connection, try to confirm the same slot at once; exactly one succeeds; repeat 100 times; an SQL check shows at most one active booking per slot; a control run with the protection switched off does double-book (so the test can fail); and the losing driver is never told "confirmed".
-- **Evidence:** the database's own index `ux_active_appointment_per_slot` already holds on the snapshot (Data Q-03, 0 rows). The concurrency result is produced in build step 4 and saved as `docs/integrity_proof.txt` (**Test**, T-01).
+- **Evidence:** the database's own index `ux_active_appointment_per_slot` already holds on the snapshot (Data Q-03, 0 rows). Concurrency result (**Test**, T-01, `docs/integrity_proof.txt`): 1,000 requests, 100 bookings, 0 double bookings over 100 repeats; control without lock and index: 900 double bookings; control without lock but with the index: 0 double bookings but 900 database errors (the code must not rely on the index alone).
 
 ## Architecture decisions
 
@@ -132,7 +133,7 @@ Not yet applied in this table: unload overrun beyond the slot (Q-09), driver's l
 - **Options:** hosted model via an API key; local open-weight model; both behind one adapter.
 - **Chosen:** one adapter over an OpenAI-style chat API with two settings: **Ollama** (local, free, for development) and **OpenRouter** (hosted, for the final recording if the local model's tool calling is unreliable). The model used is named in the README. No model decides capacity, ranking or commit.
 - **Reason:** no paid Claude key in this project; OpenRouter key available; Ollama installed.
-- **Evidence:** token use per turn measured in the scenario run and copied into `03_cost_estimate.xlsx` (**Test**).
+- **Evidence:** scenario run on `anthropic/claude-haiku-5.5` (**Test**): 14 model calls, about 35,000 tokens in and 2,250 out for 6 driver messages (about 2,500 in per call). Still to copy into `03_cost_estimate.xlsx`.
 - **Revisit if:** tool-calling errors exceed 1 in 5 turns on both routes (fall back to option A).
 
 ### D-18 Observability

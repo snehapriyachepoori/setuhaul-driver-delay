@@ -183,7 +183,7 @@ def get_shipment_context(ctx: ToolContext, a: ShipmentIn) -> dict:
     s = ctx.conn.execute("SELECT shipment_id, priority_code, required_dock_type, temperature_control_required, "
                          "load_weight_kg, expected_unload_min, current_status FROM shipments WHERE shipment_id=?",
                          (a.shipment_id,)).fetchone()
-    return {"ok": True, "shipment": {**dict(s), "refrigerated": bool(s["temperature_control_required"])},
+    return {"ok": True, "status": "OK", "shipment": {**dict(s), "refrigerated": bool(s["temperature_control_required"])},
             **_state_read(ctx, a.shipment_id)}
 
 

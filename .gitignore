@@ -8,3 +8,5 @@ data/*.db-shm
 checkpoints*.db*
 data/test_*
 .pytest_cache/
+data/work_*
+data/checkpoints_*
