@@ -118,6 +118,8 @@ def main() -> int:
     Path(a.out).write_text("\n".join(md) + "\n", encoding="utf-8")
     svc.close()
     conn.close()
+    from src.tracing import flush
+    flush()                      # send any LangSmith traces before exiting (no-op when tracing is off)
     ok = len(hs) == 1 and hs[0]["reason_code"] == "NO_FEASIBLE_SLOT" and dbl == 0
     print("\n".join(md))
     print(f"\nsaved {a.out}  ->  {'PASS' if ok else 'CHECK: expected exactly one NO_FEASIBLE_SLOT escalation'}")

@@ -267,7 +267,8 @@ class DelayService:
         rid = uuid.uuid4().hex
         _RUNTIME[rid] = {"conn": self.conn, "model": self.model, "driver_id": driver_id, "now": self.clock}
         try:
-            cfg = {"configurable": {"thread_id": thread_id, "runtime_id": rid}, "recursion_limit": 40}
+            cfg = {"configurable": {"thread_id": thread_id, "runtime_id": rid}, "recursion_limit": 40,
+                   "run_name": "driver_turn", "metadata": {"thread_id": thread_id, "prompt": PROMPT_VERSION}}
             # Mask BEFORE invoke: LangGraph checkpoints the raw input, so a phone must never reach it.
             out = self.graph.invoke({"input_text": mask_pii(text), "msg_key": msg_key or uuid.uuid4().hex}, cfg)
         finally:

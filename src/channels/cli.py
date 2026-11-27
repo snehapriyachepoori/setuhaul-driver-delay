@@ -49,6 +49,8 @@ def main() -> None:
             print(f"   [tool {t['tool']} -> {t['status']}]")
         print(f"agent> {r['reply']}   [stage {r['stage']}]")
     svc.close()
+    from src.tracing import flush
+    flush()
 
 
 if __name__ == "__main__":

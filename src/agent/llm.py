@@ -38,7 +38,9 @@ class OpenAIStyleModel:
     def __init__(self, base_url: str, api_key: str, models: list[str], extra_headers: dict | None = None):
         from openai import OpenAI
 
-        self.client = OpenAI(base_url=base_url, api_key=api_key, timeout=TIMEOUT_S, max_retries=0)
+        from src.tracing import wrap_client
+
+        self.client = wrap_client(OpenAI(base_url=base_url, api_key=api_key, timeout=TIMEOUT_S, max_retries=0))
         self.models = [m for m in models if m]
         self.extra_headers = extra_headers or {}
 
