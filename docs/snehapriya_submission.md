@@ -1,5 +1,5 @@
-# Submission template
-Name: [your name]
+# Submission: Snehapriya Chepoori
+Name: Snehapriya Chepoori
 Repo (or Google Drive) link: https://github.com/snehapriyachepoori/setuhaul-driver-delay
 Live demo link (if deployed): not deployed (runs locally: `python run.py demo`)
 Stack used: Python 3.13, SQLite (WAL), LangGraph 1.2.24, Pydantic 2.14.4, pytest 9.2.0, OpenAI-style client 3.60.0 to OpenRouter (`anthropic/claude-haiku-5.5`, fallback `openai/gpt-4o-mini`); Ollama and a no-model rules mode as alternatives. No LangSmith yet. Built with AI assistance (Claude via Claude Code); I ran, reviewed and can explain the code.

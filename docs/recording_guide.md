@@ -90,4 +90,4 @@ Type the hand-off id to acknowledge it (optional), then stop the recorder (**Win
 ## After recording
 1. Watch it once: is the text readable, and is no key or `.env` visible?
 2. Upload it to **Google Drive** (sharing: "Anyone with the link can view") or **YouTube as Unlisted**.
-3. Send the link to the assistant. It goes into `docs/05_submission_template_FILLED.md` (item 4), and the repo is pushed.
+3. Send the link to the assistant. It goes into `docs/snehapriya_submission.md` (item 4), and the repo is pushed.

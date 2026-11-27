@@ -19,4 +19,4 @@
 | 4 | Scenario run ending in one escalation | `docs/scenario_run.md` + recording | Ready: transcript + video (https://drive.google.com/file/d/1S-sx1aLPULcVHeY2Bkw-VIneLmCg2PQr/view?usp=sharing) |
 | 5 | Integrity proof: no double booking | `docs/integrity_proof.txt` | Ready: 1,000 / 100 / 0; control double-books |
 | 6 | One-page client readout (policy, limits, risks) | `docs/client_readout.md` | Draft ready |
-| - | Filled template | `docs/05_submission_template_FILLED.md` | Filled except repo and video links |
+| - | Filled template | `docs/snehapriya_submission.md` | Filled (name, repo and video links in) |
