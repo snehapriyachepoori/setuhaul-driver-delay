@@ -172,7 +172,10 @@ def guard(state: TurnState, config) -> dict:
     msgs = state["messages"]
     last_user = max(i for i, m in enumerate(msgs) if m["role"] == "user")
     turn_results = [json.loads(m["content"]) for m in msgs[last_user + 1:] if m["role"] == "tool"]
-    all_results_text = " ".join(m["content"] for m in msgs if m["role"] == "tool")
+    # A time is grounded if a tool returned it OR the driver said it (reading a driver's time back is allowed).
+    all_results_text = " ".join(m["content"] or "" for m in msgs if m["role"] in ("tool", "user"))
+    all_results_text += " " + " ".join(f"{int(h):02d}:{mm}" for h, mm in
+                                       re.findall(r"\b([01]?\d|2[0-3])[:.]([0-5]\d)\b", all_results_text))
     reply = mask_pii(state.get("reply") or "")
     problems = []
     if not reply.strip():

@@ -136,6 +136,25 @@ def test_output_guard_blocks_unbacked_confirmation(svc_factory):
     assert any(x.get("code") == "OUTPUT_GUARD_REPLACED" for x in r["log"])
 
 
+def test_reading_back_the_drivers_own_time_is_not_blocked(svc_factory):
+    """Found in the screen recording: the model read back '18:30' before calling a tool, and the guard
+    wrongly replaced the reply. A time the driver typed is grounded."""
+    class ReadBack:
+        def chat(self, messages, tools):
+            return ModelReply("So you will reach the gate at 18:30, right?", [], "readback")
+    r = svc_factory(model=ReadBack()).handle("T-RB", "DRV015", "I will reach jaipur at 18.30")
+    assert r["reply"] == "So you will reach the gate at 18:30, right?"
+    assert not any(x.get("code") == "OUTPUT_GUARD_REPLACED" for x in r["log"])
+
+
+def test_invented_time_is_still_blocked(svc_factory):
+    class Inventor:
+        def chat(self, messages, tools):
+            return ModelReply("You can come at 14:45 to Dock 9.", [], "inventor")
+    r = svc_factory(model=Inventor()).handle("T-IN", "DRV015", "I will reach at 18:30")
+    assert "14:45" not in r["reply"] and any(x.get("code") == "OUTPUT_GUARD_REPLACED" for x in r["log"])
+
+
 def test_model_down_hands_off(svc_factory, conn):
     class Down:
         def chat(self, *a):
