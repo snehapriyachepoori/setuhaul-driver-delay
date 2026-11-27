@@ -15,7 +15,7 @@
 |---|---|---|---|
 | 1 | Problem sheet + data audit, each issue proved by a query | `docs/01_submission_problem_sheet.md`, `docs/01_audit_queries.sql`, `docs/audit_results_REAL.txt` | Ready (real data) |
 | 2 | Decision register, 13 decisions with reason + evidence | `docs/03_decision_register.md` | Ready; entries marked **Test** get their numbers from the build |
-| 3 | Working prototype, public GitHub repo, versions in README | this repo, `README.md` | Built and tested; not yet pushed to GitHub |
+| 3 | Working prototype, public GitHub repo, versions in README | this repo, `README.md` | Built, tested, pushed: github.com/snehapriyachepoori/setuhaul-driver-delay |
 | 4 | Scenario run ending in one escalation | `docs/scenario_run.md` + recording | Transcript ready (real model, SHP1015 escalates); recording still to make |
 | 5 | Integrity proof: no double booking | `docs/integrity_proof.txt` | Ready: 1,000 / 100 / 0; control double-books |
 | 6 | One-page client readout (policy, limits, risks) | `docs/client_readout.md` | Draft ready |
