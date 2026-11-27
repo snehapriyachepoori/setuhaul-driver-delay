@@ -303,7 +303,7 @@ Holds live in the **operational** tier, not in a cache, because a hold must chan
 | `handoffs` | handoff_id, thread_id, shipment_id, reason_code, summary_json, options_shown, state_read, created_at, owner, acknowledged_at, deadline_at | Complete hand-off record (R10) |
 | `audit_events` | event_id, ts, actor, action, shipment_id, slot_id, detail_json | Append-only (R18) |
 
-Connections set `PRAGMA foreign_keys = ON`, WAL mode and a busy timeout **on every connection** (C20, Mechanism M3). A rebooking writes the old booking as `replaced` (a status the existing index already excludes) in the **same** transaction that creates the new one (C19).
+Connections set `PRAGMA foreign_keys = ON`, WAL mode and a busy timeout **on every connection** (C20, Mechanism M3). A rebooking marks the old booking CANCELLED with `is_current` 0 and reason REPLACED_BY_DRIVER_REBOOKING (the real schema has no 'replaced' status; CHG-007) in the **same** transaction that creates the new one (C19).
 
 ### 7C. Data flow (where each item enters, lives, and is masked)
 ```mermaid
@@ -435,11 +435,11 @@ stateDiagram-v2
   SAFETY --> ESCALATE: safety cue
   SAFETY --> IDENTIFY: no cue
   IDENTIFY --> CLARIFY: one shipment confirmed
-  IDENTIFY --> ESCALATE: ownership mismatch, none found
+  IDENTIFY --> IDENTIFY: not yours or none found (refuse, reveal nothing)
   CLARIFY --> OFFER: ETA, kind, latest finish known
-  OFFER --> HOLD: driver picks an option
+  OFFER --> HOLD: driver picks an option (hold_slot)
   OFFER --> ESCALATE: no feasible slot
-  HOLD --> CONFIRM: driver says yes
+  HOLD --> CONFIRM: explicit yes seen by code (confirm_booking)
   HOLD --> OFFER: hold expired or released
   CONFIRM --> DONE: committed
   CONFIRM --> OFFER: refused, new options
@@ -450,11 +450,11 @@ stateDiagram-v2
 | Stage | Tools the agent may call | What the agent does |
 |---|---|---|
 | SAFETY | none (code and classifier) | Detects safety cues |
-| IDENTIFY | `resolve_shipment` | Asks which load only if more than one |
+| IDENTIFY | `resolve_shipment` | Asks which load only if more than one. Another driver's load (MISMATCH) or no load (NONE) keeps the stage at IDENTIFY: refuse, reveal nothing (CHG-008) |
 | CLARIFY | `get_shipment_context`, `record_eta_declaration` | Asks only for missing facts: total arrival time (and what the delay means), latest time they can finish |
-| OFFER | `get_feasible_slots` | Shows up to 3 options with plain reasons. **Nothing is reserved.** Compares them |
-| HOLD | `hold_slot`, `release_hold` | Creates a hold when the driver picks one |
-| CONFIRM | `confirm_booking`, `release_hold` | Commits after an explicit yes |
+| OFFER | `get_shipment_context`, `get_feasible_slots`, `hold_slot` | Shows up to 3 options with plain reasons. **Nothing is reserved** until the driver picks one; the pick calls `hold_slot` from this stage (CHG-008) |
+| HOLD | `hold_slot`, `release_hold`, `get_feasible_slots`, `confirm_booking` | A hold exists. `confirm_booking` is offered here, but code runs it only if the driver's latest message is an explicit yes; otherwise it returns NEEDS_EXPLICIT_YES (CHG-008) |
+| CONFIRM | `confirm_booking`, `release_hold` | Short-lived: inside the confirm call; ends in DONE, OFFER (refused) or ESCALATE (approval) |
 | Any | `escalate_to_coordinator` | Hands off with the record |
 
 ### 9.2 States and what the driver sees (brief decision 6)
@@ -490,10 +490,10 @@ All tools return typed results (`status`, data, `reason_codes`). Every write tak
 |---|---|---|---|---|---|
 | `resolve_shipment` | Which load is this | `thread_id`, `driver_id` (from channel), optional hint | UNIQUE (shipment) / AMBIGUOUS (candidates) / NONE / MISMATCH | None | No |
 | `get_shipment_context` | Facts the driver should not be asked | `shipment_id` | appointment, priority, dock type, arrival state, resolved ETA with source and confidence | None | No |
-| `record_eta_declaration` | Store what the driver said | `shipment_id`, `delay_minutes` or `clock_time`, `kind` (ARRIVAL_DELAY, REPAIR_TIME, CLOCK_TIME), `idempotency_key` | New resolved ETA | One `eta_updates`-style row, one audit row | No |
+| `record_eta_declaration` | Store what the driver said | `shipment_id`, `delay_minutes` or `clock_time`, `kind` (ARRIVAL_DELAY, REPAIR_TIME, CLOCK_TIME), `idempotency_key` | New resolved ETA | Kept in conversation state and one audit row; **not** written into the client's `eta_updates` table (CHG-008) | No |
 | `get_feasible_slots` | The only source of options | `shipment_id`, `earliest`, `latest_finish`, `limit` (max 3) | Options with `offer_id`, dock, start, end, `reason_codes` | Writes `offers` rows (what was shown) | No |
 | `hold_slot` | Exclusive claim | `offer_id`, `idempotency_key` | ACTIVE (hold_id, expires_at) / REFUSED (reason, new options) | Creates a hold in a transaction | No |
-| `confirm_booking` | Commit | `hold_id`, `idempotency_key` | CONFIRMED (appointment_id) / REFUSED / NEEDS_APPROVAL | Atomic: re-check, new appointment, old one `replaced`, hold consumed, audit, outbox | **Yes, in listed cases** |
+| `confirm_booking` | Commit | `hold_id`, `idempotency_key` | CONFIRMED (appointment_id) / REFUSED / NEEDS_APPROVAL | Atomic: re-check, new appointment, old one CANCELLED with reason REPLACED_BY_DRIVER_REBOOKING (CHG-007), hold consumed, audit, outbox | **Yes, in listed cases** |
 | `release_hold` | Give it back | `hold_id`, `idempotency_key` | RELEASED | Hold state change, audit | No |
 | `escalate_to_coordinator` | Hand off | `thread_id`, `reason_code`, summary | `handoff_id`, deadline | Complete hand-off record | n/a |
 
@@ -522,21 +522,22 @@ The stand-in's mixed time zone (ETA007 stored as `06:15:00Z` for SHP1012) is con
 |---|---|---|
 | 1 | Shipment is active, belongs to this driver, and has not already docked | NOT_YOURS, ALREADY_DOCKED |
 | 2 | Slot is open: no active appointment, no live hold from another thread | TAKEN, HELD_BY_OTHER |
-| 3 | Dock is active and no dock event (breakdown, maintenance, reduced capacity) overlaps the slot | DOCK_DOWN |
+| 3 | Dock is active and no dock event (breakdown, maintenance, capacity reduction, manual block) overlaps the slot. **A dock event overrides a slot marked OPEN** (CHG-006) | DOCK_DOWN |
+| 3b | Load weight is at or below the dock's maximum (added in the build, CHG-006) | WEIGHT |
 | 4 | Dock type matches the load (reefer only at a reefer dock, heavy only at a heavy dock; standard loads stay off scarce docks) | DOCK_TYPE |
 | 5 | Slot is inside facility hours **and** any dock-specific hours | OUTSIDE_HOURS |
 | 6 | Slot start is at or after resolved ETA plus margin | TOO_EARLY |
 | 7 | Slot end plus expected unload overrun is at or before the driver's latest finish | TOO_LATE_FOR_YOU |
-| 8 | Buffer rule on the same dock (RULE003: 15 minutes) is kept, and **no overlap in time** with another active booking or hold | BUFFER, OVERLAP |
+| 8 | **No overlap in time** with another active booking or hold on the same dock. Buffer is **0**: the real RULE003 is "reefer dock required", not a 15-minute buffer (CHG-006; value in `config/policy.toml`). An unload longer than the slot blocks the next slot on that dock (assumption) | OVERLAP |
 | 9 | Priority policy (section 9.6) allows showing it to this load | PROTECTED |
-| 10 | Not later than the approval threshold from the original plan, and not on another day. If it is, the option can be shown but confirmation goes to a person | NEEDS_APPROVAL |
+| 10 | Not later than the approval threshold from the original plan, not on another day, and not starting after 21:00 (RULE005 "no new start after 21:00" is an **approval flag, not a refusal**, CHG-006). If any applies, the option can be shown but confirmation goes to a person | NEEDS_APPROVAL |
 
 Check 10 exists because the data holds **no e-way bill expiry and no driver rest limit** (C10). The code cannot test them, so it routes the risky cases to a person. The threshold (default: more than 3 hours after the plan, or another calendar day) is an **Assumption, owner: SetuHaul compliance**.
 
 Written check run on three shipments (from step 2's query results on the **stand-in**; upper bounds because unload time, buffer and other offers are not yet applied):
 | Shipment | What today's availability view says | After this check | Meaning |
 |---|---|---|---|
-| SHP1015, reefer, P1, ETA 19:40 | 11 slots look free after the ETA | **0** | D5 is in planned maintenance from 19:00 and RULE005 says it closes then. No safe option: **escalate** (scenario 6) |
+| SHP1015, reefer, P1, ETA 18:30 (real data) | Slots look free after the ETA | **0** | D5, the only reefer dock, is in planned maintenance 18:00 to 22:00 (dock event overrides OPEN slots). No safe option: **escalate** (scenario 6; proved in `docs/scenario_run.md`) |
 | SHP1010, reefer, P1 | 54 | **6** | Dock type removes most of them |
 | SHP1013, standard, P2, ETA 12:30 | About 50 to 54 for standard trucks | **About 35 to 38** | Dock events, hours and ETA remove the rest |
 
@@ -547,7 +548,7 @@ Written default, **pending the operations head** (step 1 Q6). Code applies it, a
 |---|---|
 | P-1 | A confirmed promise is **never taken back automatically**. Trust beats a slightly better schedule |
 | P-2 | A hold belongs to the thread that placed it until it expires or is released. First to hold wins |
-| P-3 | **Protected last slot:** when a dock type has 3 or fewer compatible slots in the next 4 hours, the last one is shown only to P1 loads. Parameter values are an **Assumption** |
+| P-3 | **Protected last slot:** when a dock type has 3 or fewer compatible slots in the next 4 hours, the last one is shown only to HIGH or CRITICAL loads. As built it is applied to the whole option set, not slot by slot (CHG-006). Parameter values are an **Assumption** |
 | P-4 | Pre-empting a confirmed lower-priority booking, or any case where P-1 to P-3 conflict, goes to a coordinator |
 | P-5 | When requests queue (pilot tier), order by priority, then earliest latest-finish time, then arrival time. After 10 minutes of waiting, a request moves up one class so nobody starves |
 
@@ -555,7 +556,7 @@ Tested in build step 4 and in the scenario run on SHP1006, SHP1012, SHP1013, SHP
 
 ### 9.7 Concurrency design
 - SQLite in WAL mode. Every write is a `BEGIN IMMEDIATE` transaction (it takes the write lock before reading), with a busy timeout and up to 3 jittered retries.
-- Inside one transaction: replay a stored result for a repeated key, check the hold is yours and unexpired, run the full feasibility check, insert the new appointment, mark the old one `replaced`, mark the hold consumed, write the audit row and an outbox row. Then commit.
+- Inside one transaction: replay a stored result for a repeated key, check the hold is yours and unexpired, run the full feasibility check, insert the new appointment, mark the old one CANCELLED (reason REPLACED_BY_DRIVER_REBOOKING), mark the hold consumed, write the audit row and an outbox row. Then commit.
 - The hold table's partial unique index and the existing appointment indexes are the last line of defence.
 - The reply is generated **after** the commit, from the committed result only.
 - **Postgres pilot:** `SELECT ... FOR UPDATE` on the slot, an exclusion constraint on dock and time range.
@@ -565,7 +566,8 @@ Tested in build step 4 and in the scenario run on SHP1006, SHP1012, SHP1013, SHP
 |---|---|---|
 | Short-term (this conversation): confirmed shipment, declared delay and its kind, latest finish, offers shown, stage | LangGraph checkpointer on SQLite, keyed by `thread_id` | Until the thread closes, then 7 days (**Assumption**, owner: legal) |
 | Long-term across conversations | **None.** Facts live in the database, and a person's history is not kept in the model's memory | n/a |
-| Phone numbers and locations | Never in checkpoints, logs or prompts. A masked token is used | n/a |
+| Phone numbers and locations | Never in checkpoints, logs or prompts. A masked token is used. Masking runs **before** the graph is invoked, because LangGraph checkpoints the raw input before the first node (found by a test, CHG-008) | n/a |
+| Confirmed driver ETA | Conversation state and the audit table, not the client's `eta_updates` (CHG-008) | As the conversation |
 
 Test: stop the process mid-conversation, restart, send the next message with the same `thread_id`: the stage and facts are intact.
 
@@ -588,7 +590,7 @@ Test: stop the process mid-conversation, restart, send the next message with the
 
 **Two refusal messages in plain words (brief decision 11):**
 1. Slot taken: "Sorry, 18:00 at Dock 2 was just taken by another truck before I could confirm it. I have not changed your booking. Here are the next options: ..."
-2. Dock type: "I cannot offer 18:00 at Dock 3 because your load is refrigerated and only Dock 5 takes it. Dock 5 is closed for maintenance from 19:00, so the options are 17:00 and 18:00 at Dock 5."
+2. Dock type: "I cannot offer 18:00 at Dock 3 because your load is refrigerated and only Dock 5 takes it. Dock 5 is closed for maintenance from 18:00 to 22:00, so I have asked a coordinator to find you a safe slot."
 
 ### 9.10 Observability design
 | Measure | Signal |
@@ -659,16 +661,16 @@ An interactive page was **not** built in this pass (the diagrams above and the M
 
 **Prices read on 25 Nov 2026** (verify on the provider's page before spending): Claude Haiku 5.5 $0.10 in and $0.50 out per million tokens; Claude Sonnet 5.5 $2 in and $10 out, cache reads $0.10. WhatsApp India utility and service messages about INR 0.115 each before 18% GST (news reports of Meta's 1 Oct 2026 change; BSP markup extra).
 
-**Computed in `03_cost_estimate.xlsx`** (formulas, every assumption visible; token counts are estimates until a prototype trace replaces them):
+**Computed in `03_cost_estimate.xlsx`** (formulas, every assumption visible). **Token counts are now measured** from the prototype's scenario run on 27 Nov 2026: 6 driver messages, 14 model calls, 35,166 tokens in and 2,246 out on `anthropic/claude-haiku-5.5` (the design estimate was 12 calls and about 60,000 in). One run only; real chats will vary. Caching and Sonnet routing are still assumptions: the prototype uses neither.
 | | Low | Expected | Peak month | 10x |
 |---|---|---|---|---|
 | Conversations a month | 450 | 750 | 1,800 | 7,500 |
-| Model cost, INR | about 1,020 | about 1,710 | about 4,100 | about 17,100 |
-| Total cost, INR (all lines) | about 3,050 | about 5,080 | about 27,200 | about 86,700 |
-| Cost per conversation, INR | about 6.8 | about 6.8 | about 15.1 | about 11.6 |
+| Model cost, INR | about 610 | about 1,020 | about 2,460 | about 10,240 |
+| Total cost, INR (all lines) | about 2,640 | about 4,400 | about 25,550 | about 79,840 |
+| Cost per conversation, INR | about 5.9 | about 5.9 | about 14.2 | about 10.6 |
 
-- **One conversation:** about $0.005 on Haiku 5.5 and about $0.105 on Sonnet 5.5 with caching. Routing and caching cut the model bill by about 84% against "always Sonnet, no caching".
-- **The model is not the main cost.** At low volume, coordinator time on hand-offs is about two thirds of the total. That is the real lesson: a clean hand-off record (R10) saves more than a cheaper model.
+- **One conversation (measured tokens):** about $0.005 on Haiku 5.5 without caching ($0.003 with), about $0.063 on Sonnet 5.5 with caching. Routing and caching cut the model bill by about 84% against "always Sonnet, no caching".
+- **The model is not the main cost.** At low volume, coordinator time on hand-offs is about three quarters of the total. That is the real lesson: a clean hand-off record (R10) saves more than a cheaper model.
 - **Peak and 10x use placeholder hosting, observability and maintenance figures.** Replace them with quotes.
 - **Business case:** blank until SetuHaul finance gives a detention cost per truck-hour (U-5). The workbook then shows how many detention hours a month pay for the system.
 - **Cost guardrails:** alert at 2x expected model spend, cap tokens per conversation, max 6 tool calls a turn, fall back to the small model, kill switch.
