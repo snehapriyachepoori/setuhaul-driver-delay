@@ -48,7 +48,7 @@ Python 3.13.5, SQLite 3.49.1, langgraph 1.2.24, langgraph-checkpoint-sqlite 3.1.
 | Problem sheet + audit | `docs/01_submission_problem_sheet.md`, `docs/01_audit_queries.sql` | 18 issues on the real data, each proved by a query |
 | Decision register | `docs/03_decision_register.md` | 19 decisions, test evidence filled in |
 | Integrity proof | `docs/integrity_proof.txt` | 1,000 requests / 100 bookings / **0 double bookings**; control run without protection: 900 double bookings |
-| Scenario run | `docs/scenario_run.md` | SHP1013 rebooked to D1 13:00; SHP1015 ends in **one complete escalation** |
+| Scenario run | `docs/scenario_run.md`, [video](https://drive.google.com/file/d/1S-sx1aLPULcVHeY2Bkw-VIneLmCg2PQr/view?usp=sharing) | SHP1013 rebooked to D1 13:00; SHP1015 ends in **one complete escalation** |
 | Measures | `docs/measures.md` | All nine measures, with what cannot be measured said plainly |
 | Competing trucks | `docs/competing_trucks.md` | 0 policy violations in both replays |
 | Client readout | `docs/client_readout.md` | One page |
@@ -94,7 +94,6 @@ Python 3.13.5, SQLite 3.49.1, langgraph 1.2.24, langgraph-checkpoint-sqlite 3.1.
 A driver starts a session with a phone number checked against `drivers.phone`; every tool checks the shipment belongs to that driver (MISMATCH otherwise, nothing revealed). The coordinator view needs `COORDINATOR_PIN` from `.env`. A typed phone number is not proof of identity: a real channel (for example WhatsApp) supplies a verified number. No rate limiting, no lockout, no session expiry.
 
 ## What does not work yet (plain)
-- **No screen recording yet** of the scenario run (to be recorded from `python run.py chat` or `scenario`).
 - **Not built:** LangSmith tracing (E5), the optional facility scheduler (E6), a Streamlit coordinator console (a terminal view exists instead), WhatsApp.
 - **Safety detection is a keyword list**, not a classifier. It will miss unusual wording and may over-trigger.
 - **The rules model (option A)** understands only simple English and romanised Hindi.

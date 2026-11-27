@@ -12,7 +12,7 @@ How you order competing requests: a confirmed promise is never taken back automa
 
 3. Prototype: how to run it (one command): `python run.py demo` (Windows has no make)
 
-4. Scenario run video (link): [link, to record]. Transcript: https://github.com/snehapriyachepoori/setuhaul-driver-delay/blob/main/docs/scenario_run.md
+4. Scenario run video (link): https://drive.google.com/file/d/1S-sx1aLPULcVHeY2Bkw-VIneLmCg2PQr/view?usp=sharing. Transcript: https://github.com/snehapriyachepoori/setuhaul-driver-delay/blob/main/docs/scenario_run.md
 Which case escalates and why: SHP1015, a 15,000 kg refrigerated load with ETA 18:30. D5 is the only reefer dock at Jaipur and is under maintenance from 18:00 to 22:00, so no feasible slot exists and code hands it to the Jaipur warehouse coordinator with a complete record.
 
 5. Integrity test (link): https://github.com/snehapriyachepoori/setuhaul-driver-delay/blob/main/docs/integrity_proof.txt
@@ -20,4 +20,4 @@ Result (requests sent, bookings made, double bookings): 1,000 / 100 / 0 (control
 
 6. Client readout (link): https://github.com/snehapriyachepoori/setuhaul-driver-delay/blob/main/docs/client_readout.md
 Optional scheduling tool (link, or not attempted): not attempted
-What does not work yet: screen recording not made yet; no LangSmith tracing; no facility scheduler; coordinator view is a terminal page, not a web console; safety detection is a keyword list; priority ordering of simultaneous requests needs a queue (first hold wins today); demo-level authentication; policy numbers are assumptions awaiting the client; WhatsApp not built.
+What does not work yet: no LangSmith tracing; no facility scheduler; coordinator view is a terminal page, not a web console; safety detection is a keyword list; priority ordering of simultaneous requests needs a queue (first hold wins today); demo-level authentication; policy numbers are assumptions awaiting the client; WhatsApp not built.
